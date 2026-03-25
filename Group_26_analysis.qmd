@@ -87,6 +87,31 @@ pca_summary$importance[, 1:20]
 
 From this we can see the first 6 principal components (PCs) explain 80% of the variability, and 18 explains 90% of the variability. 
 
+
+Since 18 PCs explain 90% of the variability, we will proceed with those ones.
+```{r}
+#| warning: false
+#| message: false
+#Select/Choose the first 18 pcs which explains 90% of the variation
+
+k <- 18   # number of PCs you decided to keep
+
+X_train_pca <- pca_fit$x[, 1:k]
+
+# Test PCA scores
+X_test_pca <- predict(pca_fit, newdata = X_test)[, 1:k]
+```
+
+Now this new X_train_pca and _train will be used to train the classification models and test them using X_test_pca and y_test.
+
+
+
+
+
+
+
+
+
 We will now perform Classical MDS.
 
 ```{r}
