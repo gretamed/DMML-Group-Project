@@ -79,21 +79,21 @@ We perform PCA using the correlation matrix.
 ```{r}
 #| warning: false
 #| message: false
-pca_fit <- prcomp(X_train, cor = T)
+pca_fit <- prcomp(X_train, scale. = T)
 pca_summary <- summary(pca_fit)
-pca_summary$importance[, 1:20]
+pca_summary$importance[, 1:50]
 ```
 
-From this we can see the first 6 principal components (PCs) explain 80% of the variability, and 18 explains 90% of the variability.
+From this we can see the first 40 principal components (PCs) explain 80% of the variability, and 50 explains 85% of the variability.
 
-Since 18 PCs explain 90% of the variability, we will proceed with those ones.
+Since 40 PCs explain 80% of the variability, we will proceed with those ones.
 
 ```{r}
 #| warning: false
 #| message: false
 #Select/Choose the first 18 pcs which explains 90% of the variation
 
-k <- 18   # number of PCs you decided to keep
+k <- 40   # number of PCs you decided to keep
 
 X_train_pca <- pca_fit$x[, 1:k]
 
