@@ -22,8 +22,8 @@ library(ggplot2)
 library(gt)
 library(MASS)
 library(smacof)
+library(ROCR)
 ```
-
 
 We use the following training and test data sets, that each contain 100 samples of either cancerous or non-cancerous tissue samples.
 
@@ -31,7 +31,6 @@ We use the following training and test data sets, that each contain 100 samples 
 training <- read.csv("group_26.csv")
 test <- read.csv("arcene_test.csv")
 ```
-
 
 We look at the dimensions of the test and training sets.
 
@@ -76,7 +75,7 @@ From this we can see the variables have different scales, so we will use the cor
 ## Dimension Reduction
 
 We perform PCA using the correlation matrix.
-   
+
 ```{r}
 #| warning: false
 #| message: false
@@ -84,11 +83,11 @@ pca_fit <- prcomp(X_train, cor = T)
 pca_summary <- summary(pca_fit)
 pca_summary$importance[, 1:20]
 ```
- 
-From this we can see the first 6 principal components (PCs) explain 80% of the variability, and 18 explains 90% of the variability. 
 
+From this we can see the first 6 principal components (PCs) explain 80% of the variability, and 18 explains 90% of the variability.
 
 Since 18 PCs explain 90% of the variability, we will proceed with those ones.
+
 ```{r}
 #| warning: false
 #| message: false
@@ -100,14 +99,156 @@ X_train_pca <- pca_fit$x[, 1:k]
 
 # Test PCA scores
 X_test_pca <- predict(pca_fit, newdata = X_test)[, 1:k]
+
 ```
 
-Now this new X_train_pca and _train will be used to train the classification models and test them using X_test_pca and y_test.
+Now this new X_train_pca and \_train will be used to train the classification models and test them using X_test_pca and y_test.
+
+## Support Vector Machines
+
+Initially we will begin with SVM with 18 principal components, default cost, linear kernel and C-classification.
+
+```{r}
+# Initially we use 18 pc's
+n_pcs   <- 18
+train_data <- as.data.frame(pca_fit$x[, 1:n_pcs])
+
+train_data$Class <- y_train
+
+test_data  <- as.data.frame(predict(pca_fit, X_test)[, 1:n_pcs])
+test_data$Class <- y_test
+
+# Call SVM
+svm_18pc <- svm(Class ~ ., data = train_data, type = "C-classification", kernel = "linear")
+svm_18pc
+```
+
+Now we test the model, using confidence scores, ROC and AUC. A good model that predicts the cancerous tumors well will have high AUC.
+
+```{r}
+SVM_model1 <- svm(Class ~ ., data = train_data, type = "C-classification", kernel = "linear", cost = 10, decision.values = TRUE)
+
+pred_class_model1 <- predict(SVM_model1, test_data)
+conf_mat_model1   <- table(Actual = test_data$Class, Predicted = pred_class_model1)
+accuracy_model1   <- sum(diag(conf_mat_model1)) / sum(conf_mat_model1) * 100
+
+
+# Get scores on the TEST data on AUC
+scores_model1 <- attributes(predict(SVM_model1, test_data, decision.values = TRUE))$decision.values
+
+# ROC plot and AUC calulation
+# Use ROCR:: prefix to force R to use the right functions
+pred_model1 <- ROCR::prediction(scores_model1, test_data$Class)
+perf_model1 <- ROCR::performance(pred_model1, "tpr", "fpr")
+plot(perf_model1, main = "ROC Curve")
+
+auc_model1 <- ROCR::performance(pred_model1, "auc")@y.values[[1]]
+
+
+auc_model1
+accuracy_model1
+```
+
+For model 1, which we will use as our baseline model, we see an AUC of \$\\approx\$ 0.89. This is a well fitting model to start off with.
+
+We will now try to optimise the model through comparison of cost, linear vs non-linear boundary, class imbalance and principal components.
+
+Class Imbalance assessment:
+
+```{r}
+set.seed(2003)
+weighted.tune <- tune(svm, Class ~., data = train_data,
+                      type = "C-classification", kernel = "linear",
+                      ranges = list(cost = c(0.1, 1, 10, 100)),
+                      class.weights = c("-1" = 1, "1" = 2))
+summary(weighted.tune)
+
+```
+
+We will try to compare non-linear model vs linear model
+
+```{r}
+train_data$Class <- as.factor(train_data$Class)
+test_data$Class  <- as.factor(test_data$Class)
+radial.tune <- tune(svm, Class ~., data = train_data,
+                    type = "C-classification", kernel = "radial",
+                    ranges = list(cost  = c(0.1, 1, 10, 100),
+                                  gamma = c(0.5, 1, 2, 3, 4)))
+
+summary(radial.tune)
+
+# We see minimum error at cost = 10, gamma = 0.5 and cost = 100, gamma = 0.5
+# We will test both of these cases against the linear model
+
+m_radial_c10 <- svm(Class ~ ., data = train_data, type = "C-classification",
+                kernel = "radial", cost = 10, gamma = 0.5,
+                decision.values = TRUE)
+
+s_c10<- attributes(predict(m_radial_c10, test_data, decision.values = TRUE))$decision.values
+p_c10 <- ROCR::prediction(s_c10, test_data$Class)
+auc_radial_c10 <- ROCR::performance(p_c10, "auc")@y.values[[1]]
+auc_radial_c10
+
+# c = 100
+
+m_radial_c100 <- svm(Class ~ ., data = train_data, type = "C-classification",
+                kernel = "radial", cost = 100, gamma = 0.5,
+                decision.values = TRUE)
+
+s_c100<- attributes(predict(m_radial_c100, test_data, decision.values = TRUE))$decision.values
+p_c100 <- ROCR::prediction(s_c100, test_data$Class)
+auc_radial_c100 <- ROCR::performance(p_c100, "auc")@y.values[[1]]
+auc_radial_c100
+```
+
+We get a slightly higher value of AUC in the linear boundary model, hence we will proceed with this model.
+
+Cost optimisation:
+
+```{r}
+# Optimising Cost ---------------------------------------------------------
+
+# To use tune we need the class variables as factors in both data sets
+
+set.seed(2003)
+train_data$Class <- as.factor(train_data$Class)
+test_data$Class  <- as.factor(test_data$Class)
 
 
 
+linear.tune<-tune(svm, Class~., data=train_data,
+                  type="C-classification", kernel="linear",
+                  ranges=list(cost=c(0.1,1,10,100)))
+summary(linear.tune)
+
+# We see from this that the best cost value will be 0.1, as error is lowest at 0.18, also dispersion is lowest, we notice weeor increasing monotomicaly so we may try smaller cost to see if trend continues.
+
+linear.tune2 <-tune(svm, Class~., data=train_data,
+                  type="C-classification", kernel="linear",
+                  ranges=list(cost=c(0.01, 0.03, 0.05, 0.07, 0.1)))
+summary(linear.tune2)
+
+# We see that for this somewhere between cost = 0.05 and 0.1 gives us the lowest error, We will try again within this range.
 
 
+linear.tune3 <-tune(svm, Class~., data=train_data,
+                  type="C-classification", kernel="linear",
+                  ranges=list(cost=c(0.06, 0.07, 0.08, 0.09)))
+summary(linear.tune3)
 
+# Note: 0.07 -> 0.1 all have same error, we wioll select cost then on lowest dispersion. Hence cost = 0.1
 
+# Fitting new model to compare to model 1
+SVM_model2 <- svm(Class ~ ., data = train_data, type = "C-classification",
+                kernel = "linear", cost = 0.1, decision.values = TRUE)
 
+scores_model2 <- attributes(predict(SVM_model2, test_data, decision.values = TRUE))$decision.values
+
+pred_model2 <- ROCR::prediction(scores_model2, test_data$Class)
+perf_model2 <- ROCR::performance(pred_model2, "tpr", "fpr")
+plot(perf_model2, main = "ROC Curve (cost = 0.1)")
+auc_model2 <- ROCR::performance(pred_model2, "auc")@y.values[[1]]
+auc_model2
+```
+
+Through optimising cost, we see a slight increase in the AUC value, suggesting a more accurate model.
