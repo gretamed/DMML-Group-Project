@@ -1,0 +1,114 @@
+---
+title: "Group 26: Arcene Cancer"
+author: "Todd Davison, Greta Medlam, Douglas Blackwood, Mariam El Mawed"
+format:
+  html:
+    number-sections: true
+    embed-resources: true
+editor_options:
+  chunk_output_type: console
+---
+
+# Introduction {#sec-Intro}
+
+This file contains code and analysis for the classification of cancerous tissue, based on dimension reduction and various classification methods.
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+library(dplyr)
+library(ggplot2)
+library(gt)
+library(MASS)
+library(smacof)
+```
+
+
+We use the following training and test data sets, that each contain 100 samples of either cancerous or non-cancerous tissue samples.
+
+```{r}
+training <- read.csv("group_26.csv")
+test <- read.csv("arcene_test.csv")
+```
+
+
+We look at the dimensions of the test and training sets.
+
+```{r}
+X_train <- as.matrix(training[,-1])
+y_train <- as.matrix(training[,1])
+
+X_test <- as.matrix(test[,-1])
+y_test <- as.matrix(test[,1])
+
+data.frame(Training_set = dim(X_train), 
+           Test_set = dim(X_test),
+           row.names = c("Observations", "Features")) %>%
+  gt(rownames_to_stub = T)
+```
+
+There are 2506 features and 100 observations in the training set. We look at the split of cancerous to non-cancerous observations.
+
+```{r}
+cancerous <- training[training$Class == 1,]
+dim(cancerous)
+```
+
+So we have 44 cancerous tissue samples and 56 non-cancerous samples.
+
+We will now check if the variables are on the same scale.
+
+```{r}
+# standard deviations of variables
+sds <- apply(X_train, 2, sd, na.rm = TRUE)
+summary(sds)
+```
+
+There is a large difference between the min and max, so we look at a boxplot.
+
+```{r}
+boxplot(sds, main = "SDs of variables")
+```
+
+From this we can see the variables have different scales, so we will use the correlation matrix instead of covariance matrix for PCA and we will scale the data when using MDS.
+
+## Dimension Reduction
+
+We perform PCA using the correlation matrix.
+   
+```{r}
+#| warning: false
+#| message: false
+pca_fit <- prcomp(X_train, cor = T)
+pca_summary <- summary(pca_fit)
+pca_summary$importance[, 1:20]
+```
+ 
+From this we can see the first 6 principal components (PCs) explain 80% of the variability, and 18 explains 90% of the variability. 
+
+
+Since 18 PCs explain 90% of the variability, we will proceed with those ones.
+```{r}
+#| warning: false
+#| message: false
+#Select/Choose the first 18 pcs which explains 90% of the variation
+
+k <- 18   # number of PCs you decided to keep
+
+X_train_pca <- pca_fit$x[, 1:k]
+
+# Test PCA scores
+X_test_pca <- predict(pca_fit, newdata = X_test)[, 1:k]
+```
+
+Now this new X_train_pca and _train will be used to train the classification models and test them using X_test_pca and y_test.
+
+
+
+
+
+
+
+
+
