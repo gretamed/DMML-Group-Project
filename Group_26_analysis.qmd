@@ -23,6 +23,7 @@ library(gt)
 library(MASS)
 library(smacof)
 library(ROCR)
+library(neuralnet)
 ```
 
 We use the following training and test data sets, that each contain 100 samples of either cancerous or non-cancerous tissue samples.
@@ -252,3 +253,179 @@ auc_model2
 ```
 
 Through optimising cost, we see a slight increase in the AUC value, suggesting a more accurate model.
+
+## Neural Network
+
+We will now use a Neural Network (NN) to predict a classification. We will use a validation set to decide on the NN parameters, i.e. PCs used and number of hidden nodes. We use an 80/20 split.
+
+```{r}
+set.seed(123)
+
+k <- 40
+
+# 80/20 split
+index <- sample(1:nrow(X_train), round(0.8 * nrow(X_train)))
+
+# New test and valiation sets
+X_subtrain <- X_train[index,]
+X_valid    <- X_train[-index,]
+
+# Classifications for new sets
+y_subtrain <- y_train[index]
+y_valid    <- y_train[-index]
+
+# Remove zero-variance columns (causes an error when running PCA if we don't)
+subtrain_sd <- apply(X_subtrain, 2, sd)
+keep_cols <- subtrain_sd > 0
+
+X_subtrain <- X_subtrain[, keep_cols]
+X_valid    <- X_valid[, keep_cols]
+
+# PCA on sub-training set 
+pca_fit <- prcomp(X_subtrain, scale. = TRUE)
+
+# Define the Principal components for training and validation sets
+train_pcs <- pca_fit$x[, 1:k]
+valid_pcs <- predict(pca_fit, newdata = X_valid)[, 1:k]
+```
+
+We change the classification from -1 or 1, which it is in the original data, to 0 or 1 as this is what neuralnet assumes. We then construct the training and test sets for the NN.
+
+```{r}
+y_subtrain_bin <- ifelse(y_subtrain == "-1", 0, 1)
+y_valid_bin  <- ifelse(y_valid  == "-1", 0, 1)
+
+train_nn <- data.frame(Class = y_subtrain_bin, train_pcs)
+valid_nn  <- data.frame(Class = y_valid_bin,  valid_pcs)
+```
+
+We fit an initial NN using the logistic function and cross entropy loss. 
+
+```{r}
+# Fit neural network
+nn_fit <- neuralnet(
+  Class ~ .,
+  data = train_nn,
+  hidden = c(5),          # 1 hidden layer with 5 neurons
+  linear.output = FALSE,  # classification
+  act.fct = "logistic",
+  err.fct = "ce",         # cross-entropy
+  likelihood = T
+)
+CE_loss <- round(nn_fit$result.matrix[1,1],3)
+AIC <- round(nn_fit$result.matrix[4,1],3)
+BIC <- round(nn_fit$result.matrix[5,1],3)
+
+tibble('Metric' = c('AIC', 'BIC','CE Loss'),
+                       'Value' = c(AIC, BIC, CE_loss)) %>% gt()
+```
+
+We will now look at the effect of varying the number of PCs used and the number of hidden nodes.
+
+```{r}
+set.seed(123)
+results <- data.frame()
+
+for (k in seq(40, 80, by=10)) {
+ # training PCs
+  train_pcs <- pca_fit$x[, 1:k]
+  
+  # validation PCs projected into the same PCA space
+  valid_pcs <- predict(pca_fit, newdata = X_valid)[, 1:k]
+  
+  # data frames for neuralnet
+  train_nn <- data.frame(Class = y_subtrain_bin, train_pcs)
+  valid_nn <- data.frame(Class = y_valid_bin, valid_pcs)
+  
+  for (h in 5:15) {
+    
+    nn_fit <- neuralnet(
+      Class ~ .,
+      data = train_nn,
+      hidden = c(h),
+      linear.output = FALSE,
+      act.fct = "logistic",
+      err.fct = "ce",
+      likelihood = TRUE
+    )
+    
+    # numerical summaries
+    CE_loss_train <- nn_fit$result.matrix[1, 1]
+    AIC_train <- nn_fit$result.matrix[4, 1]
+    BIC_train <- nn_fit$result.matrix[5, 1]
+    
+    # validation predictions
+    valid_prob <- as.numeric(predict(nn_fit, valid_nn[,-1]))
+    
+    # convert probabilities into classification (i.e. assign to case if probability > 50%)
+    valid_pred <- ifelse(valid_prob >= 0.5, 1, 0)
+    
+    valid_accuracy <- mean(valid_pred == y_valid_bin)
+    
+    results <- rbind(
+      results,
+      data.frame(
+        PCs = k,
+        hidden = h,
+        AIC = AIC_train,
+        BIC = BIC_train,
+        TrainCrossEntropyLoss = CE_loss_train,
+        ValidationAccuracy = valid_accuracy
+      )
+    )
+  }
+}
+
+results %>%
+  arrange(desc(ValidationAccuracy), hidden) %>%
+  slice_head(n = 10) %>%
+  gt()
+```
+
+Since multiple NNs get a validation accuracy score of 80% we use the simplest one, with 70 PCs and 5 hidden nodes. We define simplest here as the lowest AIC and BIC score. Note the validation accuracy changes by 0.05 as we only have 20 observations in the validation set, hence identifying one more observation correctly changes the score by 1 / 20 = 0.05. Now we fit our model.
+
+```{r}
+set.seed(123)
+
+# Number of PCs
+k <- 70
+# Number of hidden nodes
+h <- 5
+
+# Perform PCA on whole training set
+pca_fit <- prcomp(X_train, scale. = T)
+
+# Define the Principal components for training and validation sets
+train_pcs <- pca_fit$x[, 1:k]
+test_pcs  <- predict(pca_fit, newdata = X_test)[, 1:k]
+
+# Update classification to 0 or 1 (as required by neuralnet)
+y_train_bin <- ifelse(y_train == "-1", 0, 1)
+y_test_bin  <- ifelse(y_test  == "-1", 0, 1)
+
+train_nn <- data.frame(Class = y_train_bin, train_pcs)
+test_nn  <- data.frame(Class = y_test_bin, test_pcs)
+
+# Create final neural network with optimised parameters
+final_nn <- neuralnet(
+  Class ~ .,
+  data = train_nn,
+  hidden = c(h),
+  linear.output = FALSE,
+  act.fct = "logistic",
+  err.fct = "ce",
+  likelihood = TRUE
+)
+
+# Make classifications on test set based on our NN
+test_prob <- as.numeric(predict(final_nn, test_nn[,-1]))
+test_pred <- ifelse(test_prob >= 0.5, 1, 0)
+
+# Compare our predicted classifications to actual
+test_accuracy <- mean(test_pred == y_test_bin)
+test_accuracy
+
+table(Predicted = test_pred, Actual = y_test_bin)
+```
+
+This gives a test accuracy of 86%, a very good score.
