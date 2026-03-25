@@ -76,7 +76,7 @@ From this we can see the variables have different scales, so we will use the cor
 ## Dimension Reduction
 
 We perform PCA using the correlation matrix.
-
+   
 ```{r}
 #| warning: false
 #| message: false
@@ -84,7 +84,7 @@ pca_fit <- prcomp(X_train, cor = T)
 pca_summary <- summary(pca_fit)
 pca_summary$importance[, 1:20]
 ```
-
+ 
 From this we can see the first 6 principal components (PCs) explain 80% of the variability, and 18 explains 90% of the variability. 
 
 
@@ -111,50 +111,3 @@ Now this new X_train_pca and _train will be used to train the classification mod
 
 
 
-
-We will now perform Classical MDS.
-
-```{r}
-# Euclidean distances for training points
-D_train <- dist(scale(X_train), method = "euclidean")
-
-# classical MDS to k dimensions
-cmds_fit <- cmdscale(D_train, k = 10)
-summary(cmds_fit)
-```
-
-To evaluate the information retained we look at the correlation between our new point and the original points.
-
-```{r}
-orig_dist <- as.vector(D_train)
-mds_dist <- as.vector(dist(cmds_fit))
-
-cor(orig_dist, mds_dist)
-```
-
-There is very strong correlation between the distance between the original points and the new lower dimensional points. The correlation can be made stronger by increasing k.
-
-Metric MDS:
-
-```{r}
-corr_mat <- cor(X_train)
-dissimilarity <- sim2diss(corr_mat, method = "corr")
-mmds_fit_2 <- mds(dissimilarity, ndim = 2, type = "interval")
-mmds_fit_5 <- mds(dissimilarity, ndim = 5, type = "interval")
-mmds_fit_10 <- mds(dissimilarity, ndim = 10, type = "interval")
-mmds_fit_15 <- mds(dissimilarity, ndim = 15, type = "interval")
-
-data.frame(ndim = c(2,5,10,15),stress_score = c(mmds_fit_2$stress, mmds_fit_5$stress, mmds_fit_10$stress, mmds_fit_15$stress)) %>% gt()
-```
-
-We can see the difference between 10 and 15 dimensions doesn't reduce the cost function by much, so a sensible choice for ndim likely lies in this region. Below are some Shepard plots.
-
-```{r}
-par(mfrow = c(2, 2))   # 2 rows, 2 columns
-plot(mmds_fit_2,  plot.type="Shepard", main="Shepard diag. 2D")
-plot(mmds_fit_5,  plot.type="Shepard", main="Shepard diag. 5D")
-plot(mmds_fit_10,  plot.type="Shepard", main="Shepard diag. 10D")
-plot(mmds_fit_15,  plot.type="Shepard", main="Shepard diag. 15D")
-```
-
-Ideally these should be a straight line. We see 15 dimensions agrees with this the most. 
