@@ -79,7 +79,7 @@ We perform PCA using the correlation matrix.
 ```{r}
 #| warning: false
 #| message: false
-pca_fit <- prcomp(X_train, scale. = T)
+pca_fit <- prcomp(X_train, scale = T)
 pca_summary <- summary(pca_fit)
 pca_summary$importance[, 1:50]
 ```
