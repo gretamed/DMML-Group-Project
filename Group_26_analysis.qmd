@@ -24,6 +24,10 @@ library(MASS)
 library(smacof)
 library(ROCR)
 library(neuralnet)
+library(e1071)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
 ```
 
 We use the following training and test data sets, that each contain 100 samples of either cancerous or non-cancerous tissue samples.
@@ -92,7 +96,7 @@ Since 40 PCs explain 80% of the variability, we will proceed with those ones.
 ```{r}
 #| warning: false
 #| message: false
-#Select/Choose the first 18 pcs which explains 90% of the variation
+#Select/Choose the first 40 pcs which explains 90% of the variation
 
 k <- 40   # number of PCs you decided to keep
 
@@ -163,7 +167,6 @@ weighted.tune <- tune(svm, Class ~., data = train_data,
                       ranges = list(cost = c(0.1, 1, 10, 100)),
                       class.weights = c("-1" = 1, "1" = 2))
 summary(weighted.tune)
-
 ```
 
 We will try to compare non-linear model vs linear model
@@ -429,3 +432,202 @@ table(Predicted = test_pred, Actual = y_test_bin)
 ```
 
 This gives a test accuracy of 86%, a very good score.
+
+## Classification Trees
+
+We now use binary classification trees to predict the class of tissue samples. To begin, trees will be fit to the data for different numbers of PCS. A topdown approach will be taken to fit full trees and prune them according to the minumum error criterion, which produces more accurate results than the smallest tree criterion.
+
+First we use 40 PCs, which capture 80% of variability in the data
+
+```{r}
+#Apply PCA to our training and test data
+PCA40_train <- data.frame(Class = as.factor(y_train), predict(pca_fit, X_train)[,1:40])
+PCA40_test <- data.frame(Class = as.factor(y_test), predict(pca_fit, X_test)[,1:40])
+
+# Full tree:
+tree_PCA40_full <- rpart(Class~., data=PCA40_train, method="class", minsplit=2, 
+                        minbucket=1, cp=-1)
+tree_PCA40_full
+
+# Pruning:
+printcp(tree_PCA40_full)
+# Minimum xerror: Tree 6, cp=0.022727
+tree_PCA40 <- prune(tree_PCA40_full, cp=0.023)
+rpart.plot(tree_PCA40, type=2, extra=4 )
+tree_PCA40
+```
+
+Assessing variable importance in this tree shows that PC13 is the most important variable (13.75), with most PCs beyond 13 holding very little importance. PC38 is the only important PC above 13 (6.46).
+
+```{r}
+tree_PCA40$variable.importance 
+# PC13 is significantly most important, 13 PCs only explain 62% of variability though
+# PC38 is relatively important, but maybe not enough to justify that many more?
+```
+
+We now assess the accuracy of this tree by using it to predict the class of samples in the test data. The test accuracy of this tree is 69%, not a particularly good score.
+
+```{r}
+# Now to assess overall accuracy of this tree
+tree_PCA40_pred <- predict(tree_PCA40, newdata=PCA40_test, type="class")
+class_rate_tree40 <- mean(tree_PCA40_pred==PCA40_test$Class)
+class_rate_tree40 
+```
+
+Before fitting different tree based methods to improve this accuracy, it is worth investigating whether using a different number of PCs improves accuracy.
+
+We repeat the process using 50 PCs, which capture 85% of the variability in the data.
+
+```{r}
+PCA50_train <- data.frame(Class = as.factor(y_train), predict(pca_fit, X_train)[,1:50])
+PCA50_test <- data.frame(Class = as.factor(y_test), predict(pca_fit, X_test)[,1:50])
+
+# Full tree:
+tree_PCA50_full <- rpart(Class~., data=PCA50_train, method="class", minsplit=2, 
+                         minbucket=1, cp=-1)
+tree_PCA50_full
+
+# Pruning:
+printcp(tree_PCA50_full)
+# Minimum xerror: Tree 6, cp=0.022727
+# There appears to be an optimal complexity parameter
+tree_PCA50 <- prune(tree_PCA50_full, cp=0.023)
+rpart.plot(tree_PCA50, type=2, extra=4 )
+tree_PCA50
+```
+
+We see that minimum error pruning results in the same complexity parameter as before.
+We also see *identical* variable importance as the previous tree
+```{r}
+tree_PCA50$variable.importance
+# Similar to previous tree
+# 13 at the top
+```
+
+And the test accuracy is 69% again, so this level of PCs leads to no improvement
+```{r}
+# Overall accuracy
+tree_PCA50_pred <- predict(tree_PCA50, newdata=PCA50_test, type="class")
+class_rate_tree50 <- mean(tree_PCA50_pred==PCA50_test$Class)
+class_rate_tree50 
+```
+
+The poor performance of these trees, and the large number of unimportant variables they both use, suggests that a lower number of PCs may be worth investigating.
+
+The evident importance of PC13 suggests that we should repeat the process as such.
+
+```{r}
+PCA13_train <- data.frame(Class = as.factor(y_train), predict(pca_fit, X_train)[,1:13])
+PCA13_test <- data.frame(Class = as.factor(y_test), predict(pca_fit, X_test)[,1:13])
+
+# Full tree
+tree_PCA13_full <- rpart(Class~., data=PCA13_train, method="class", minsplit=2, 
+                         minbucket=1, cp=-1)
+tree_PCA13_full
+
+# Pruning:
+printcp(tree_PCA13_full) 
+# Minimum xerror: Tree 7, cp=0.011364
+tree_PCA13 <- prune(tree_PCA13_full, cp=0.012)
+rpart.plot(tree_PCA13, type=2, extra=4 )
+tree_PCA13
+```
+
+This tree is pruned according to a different complexity parameter.
+All of the variables are of significant importance.
+
+```{r}
+tree_PCA13$variable.importance 
+
+tree_PCA13_pred <- predict(tree_PCA13, newdata=PCA13_test, type="class")
+class_rate_tree13 <- mean(tree_PCA13_pred==PCA13_test$Class)
+class_rate_tree13
+
+tab13 <- table(PCA13_test$Class, tree_PCA13_pred)
+tab13
+```
+
+This tree returns a test accuracy of 70%, a slight improvement on the previous two trees.
+In the cross classification table, we also see that this tree produces significantly more false positives than false negatives, which seems preferrable in this context.
+There appears to be no benefit to including an extra 27 variables in a classification tree, so we proceed with 13 PCs.
+
+Worth noting is that classification trees are subject to overfitting and high-variance. We turn to other tree based methods, contained within randomForest, to see whether the accuracy of our method can be improved.
+
+We begin by applying bagging to a tree for data with 13 PCs.
+
+```{r}
+# Use randomForset, with mtry set to the number of variables
+set.seed(101)
+bag_PCA13 <- randomForest(Class~., data=PCA13_train, mtry=13, 
+                          ntree=300) # 300 optimal
+bag_PCA13 
+```
+
+Obtain an  OOB estimate of  error rate of 19%, and the cross corelation matrix already appears to be an improvement.
+
+```{r}
+varImpPlot(bag_PCA13)
+
+bag_PCA13_pred <- predict(bag_PCA13, newdata=PCA13_test, type="class")
+class_rate_bag <- mean(bag_PCA13_pred==PCA13_test$Class)
+class_rate_bag
+```
+
+Whilst PC13 remains significantly the most important variable, the relative importance of other variables is different in this method than the previous tree.
+
+The test accuracy is 82%, which is a vast improvement.
+
+As a sanity check, we will verify that the benefit of using 13 PCs translates to this method by fitting a bagged model to data with 13 PCs.
+
+```{r}
+set.seed(101)
+bag_PCA40 <- randomForest(Class~., data=PCA40_train, mtry=40, 
+                          ntree=400) # 400 optimal
+bag_PCA40 
+
+varImpPlot(bag_PCA40)
+
+bag_PCA40_pred <- predict(bag_PCA40, newdata=PCA40_test, type="class")
+class_rate_bag2 <- mean(bag_PCA40_pred==PCA40_test$Class)
+class_rate_bag2
+```
+
+This method has an OOB error rate of 21%.
+We see the expected pattern in the variable importance plot.
+The test accuracy is 80%, so we retain 13 PCs.
+
+However, if we have observed anything so far it is that there is a dominant feature in this data, which leads to high correlation between bagged models, ultimately limiting the effect that bagging has on reducing variance.
+
+We finally use a random forest method, which comabts the effects of dominant variables.
+
+```{r}
+# use randomForest without mtry argument
+set.seed(101)
+rf_PCA13 <- randomForest(Class~., data=PCA13_train, ntree=200) 
+rf_PCA13 
+varImpPlot(rf_PCA13)
+
+rf_PCA13_pred <- predict(rf_PCA13, newdata=PCA13_test, type="class")
+class_rate_rf <- mean(rf_PCA13_pred==PCA13_test$Class)
+class_rate_rf 
+```
+
+This method has an OOB estimate of  error rate of 18%.
+We see that all of the variables are less important.
+However, test accuracy is only 80%, so a decrease on the previous model.
+
+```{r}
+# use randomForest without mtry argument
+set.seed(101)
+rf_PCA40 <- randomForest(Class~., data=PCA40_train, ntree=200) 
+rf_PCA40 
+varImpPlot(rf_PCA40)
+
+rf_PCA40_pred <- predict(rf_PCA40, newdata=PCA40_test, type="class")
+class_rate_rf <- mean(rf_PCA40_pred==PCA40_test$Class)
+class_rate_rf 
+```
+ No, no magical change.
+ 
+Of all of the classification tree methods, bagging produces the best results. And, across all of these models, using 13 PCs, which only capture 62% of variabiltiy, prodices best results.
+The classification tree of choice is obtained by applying bagging to data with 13 PCs, which achieves an accuracy of 82%. However, we allready know that this is not the most accurate classification method that has been tested for this data. 
