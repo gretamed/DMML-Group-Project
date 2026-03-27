@@ -111,7 +111,11 @@ Now this new X_train_pca and \_train will be used to train the classification mo
 
 ## Support Vector Machines
 
-Initially we will begin with SVM with 18 principal components, default cost, linear kernel and C-classification.
+Support Vector Machines (SVM) is a supervised learning technique used to classify data. Here we will be using SVM to classify the variable 'Class'. Class is conveniently in the format already required by SVM of being binary with values -1, 1 for non-cancerous and cancerous respectively.
+
+In the following code, different kernels will be tuned based on error and compared using 10-fold cross validation. Each SVM model will have AUC calculated based on ROC plot, as a measure of 'goodness of fit', as such models will be compared. Through comparison of confusion matrix calculated for each model, the model selection/optimisation process can take place to determine the best SVM classification model to detect cancerous cells in the test set.
+
+Initially, a baseline AUC value must be caluated using default cost, C-classification and linear kernel.
 
 ```{r}
 # Initially we use 18 pc's
@@ -302,7 +306,7 @@ train_nn <- data.frame(Class = y_subtrain_bin, train_pcs)
 valid_nn  <- data.frame(Class = y_valid_bin,  valid_pcs)
 ```
 
-We fit an initial NN using the logistic function and cross entropy loss. 
+We fit an initial NN using the logistic function and cross entropy loss.
 
 ```{r}
 # Fit neural network
@@ -496,8 +500,8 @@ rpart.plot(tree_PCA50, type=2, extra=4 )
 tree_PCA50
 ```
 
-We see that minimum error pruning results in the same complexity parameter as before.
-We also see *identical* variable importance as the previous tree
+We see that minimum error pruning results in the same complexity parameter as before. We also see *identical* variable importance as the previous tree
+
 ```{r}
 tree_PCA50$variable.importance
 # Similar to previous tree
@@ -505,6 +509,7 @@ tree_PCA50$variable.importance
 ```
 
 And the test accuracy is 69% again, so this level of PCs leads to no improvement
+
 ```{r}
 # Overall accuracy
 tree_PCA50_pred <- predict(tree_PCA50, newdata=PCA50_test, type="class")
@@ -533,8 +538,7 @@ rpart.plot(tree_PCA13, type=2, extra=4 )
 tree_PCA13
 ```
 
-This tree is pruned according to a different complexity parameter.
-All of the variables are of significant importance.
+This tree is pruned according to a different complexity parameter. All of the variables are of significant importance.
 
 ```{r}
 tree_PCA13$variable.importance 
@@ -547,9 +551,7 @@ tab13 <- table(PCA13_test$Class, tree_PCA13_pred)
 tab13
 ```
 
-This tree returns a test accuracy of 70%, a slight improvement on the previous two trees.
-In the cross classification table, we also see that this tree produces significantly more false positives than false negatives, which seems preferrable in this context.
-There appears to be no benefit to including an extra 27 variables in a classification tree, so we proceed with 13 PCs.
+This tree returns a test accuracy of 70%, a slight improvement on the previous two trees. In the cross classification table, we also see that this tree produces significantly more false positives than false negatives, which seems preferrable in this context. There appears to be no benefit to including an extra 27 variables in a classification tree, so we proceed with 13 PCs.
 
 Worth noting is that classification trees are subject to overfitting and high-variance. We turn to other tree based methods, contained within randomForest, to see whether the accuracy of our method can be improved.
 
@@ -563,7 +565,7 @@ bag_PCA13 <- randomForest(Class~., data=PCA13_train, mtry=13,
 bag_PCA13 
 ```
 
-Obtain an  OOB estimate of  error rate of 19%, and the cross corelation matrix already appears to be an improvement.
+Obtain an OOB estimate of error rate of 19%, and the cross corelation matrix already appears to be an improvement.
 
 ```{r}
 varImpPlot(bag_PCA13)
@@ -592,9 +594,7 @@ class_rate_bag2 <- mean(bag_PCA40_pred==PCA40_test$Class)
 class_rate_bag2
 ```
 
-This method has an OOB error rate of 21%.
-We see the expected pattern in the variable importance plot.
-The test accuracy is 80%, so we retain 13 PCs.
+This method has an OOB error rate of 21%. We see the expected pattern in the variable importance plot. The test accuracy is 80%, so we retain 13 PCs.
 
 However, if we have observed anything so far it is that there is a dominant feature in this data, which leads to high correlation between bagged models, ultimately limiting the effect that bagging has on reducing variance.
 
@@ -612,9 +612,7 @@ class_rate_rf <- mean(rf_PCA13_pred==PCA13_test$Class)
 class_rate_rf 
 ```
 
-This method has an OOB estimate of  error rate of 18%.
-We see that all of the variables are less important.
-However, test accuracy is only 80%, so a decrease on the previous model.
+This method has an OOB estimate of error rate of 18%. We see that all of the variables are less important. However, test accuracy is only 80%, so a decrease on the previous model.
 
 ```{r}
 # use randomForest without mtry argument
@@ -627,7 +625,7 @@ rf_PCA40_pred <- predict(rf_PCA40, newdata=PCA40_test, type="class")
 class_rate_rf <- mean(rf_PCA40_pred==PCA40_test$Class)
 class_rate_rf 
 ```
- No, no magical change.
- 
-Of all of the classification tree methods, bagging produces the best results. And, across all of these models, using 13 PCs, which only capture 62% of variabiltiy, prodices best results.
-The classification tree of choice is obtained by applying bagging to data with 13 PCs, which achieves an accuracy of 82%. However, we allready know that this is not the most accurate classification method that has been tested for this data. 
+
+No, no magical change.
+
+Of all of the classification tree methods, bagging produces the best results. And, across all of these models, using 13 PCs, which only capture 62% of variabiltiy, prodices best results. The classification tree of choice is obtained by applying bagging to data with 13 PCs, which achieves an accuracy of 82%. However, we allready know that this is not the most accurate classification method that has been tested for this data.
