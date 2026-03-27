@@ -61,6 +61,34 @@ dim(cancerous)
 
 So we have 44 cancerous tissue samples and 56 non-cancerous samples.
 
+We look at the correlation between variables, as PCA works best when variables are highly correlated.
+
+```{r}
+corr_mat <- cor(X_train)
+cors <- corr_mat[upper.tri(corr_mat)]
+
+mean_cor <- mean(cors)
+mean_cor
+```
+
+This is very low. However there are dummy variables in the dataset, so this mean may be skewed by dummy variables with very little/no correlation to non-dummy variables.
+
+```{r}
+high_count <- sum(abs(cors) >= 0.67)
+mid_count <- sum(abs(cors) >= 0.33 & abs(cors) < 0.67)
+little_count <- sum(abs(cors) >= 0.01 & abs(cors) < 0.33)
+zero_count   <- sum(abs(cors) < 0.01)
+
+c(
+  Highly_correlated = high_count,
+  Mild_correlation = mid_count,
+  Little_correlation = little_count,
+  Near_zero_correlation = zero_count
+) 
+```
+
+While a majority of variables have little to no correlation there is a significant amount with high or mild correlation, so PCA should still work reasonably well.
+
 We will now check if the variables are on the same scale.
 
 ```{r}
@@ -91,7 +119,24 @@ pca_summary$importance[, 1:50]
 
 From this we can see the first 40 principal components (PCs) explain 80% of the variability, and 50 explains 85% of the variability.
 
-Since 40 PCs explain 80% of the variability, we will proceed with those ones.
+We look at a scree plot.
+
+```{r}
+# Proportion of variance explained
+pve <- (pca_fit$sdev^2) / sum(pca_fit$sdev^2)
+
+# Scree plot
+plot(
+  1:50, pve[1:50],
+  xlab = "Principal Component",
+  ylab = "Proportion of Variance Explained",
+  main = "Scree Plot"
+)
+```
+
+From the scree plot we can see the "elbow" appears between 8 and 15 PCs approximately.
+
+Since 40 PCs explain 80% of the variability, we will proceed with this as our default number of PCs.
 
 ```{r}
 #| warning: false
@@ -107,7 +152,22 @@ X_test_pca <- predict(pca_fit, newdata = X_test)[, 1:k]
 
 ```
 
-Now this new X_train_pca and \_train will be used to train the classification models and test them using X_test_pca and y_test.
+We can also use MDS for dimension reduction, however it doesn't have a predict function to map data from the test set to the same space that the model was trained on. Hence, we will not use it for classification models.
+
+We will now perform Classical MDS.
+
+```{r}
+# Euclidean distances for training points
+D_train <- dist(scale(X_train), method = "euclidean")
+
+# classical MDS to k dimensions
+cmds_fit <- cmdscale(D_train, k = 90, eig = T)
+cmds_fit$GOF
+```
+
+This gives a very good goodness of fit value for k = 90.
+
+We will now look at various classification methods, using PCA.
 
 ## Support Vector Machines
 
@@ -322,7 +382,7 @@ We will now use a Neural Network (NN) to predict a classification. We will use a
 ```{r}
 set.seed(123)
 
-k <- 40
+k <- 80
 
 # 80/20 split
 index <- sample(1:nrow(X_train), round(0.8 * nrow(X_train)))
@@ -360,9 +420,19 @@ train_nn <- data.frame(Class = y_subtrain_bin, train_pcs)
 valid_nn  <- data.frame(Class = y_valid_bin,  valid_pcs)
 ```
 
-We fit an initial NN using the logistic function and cross entropy loss.
+We ensure the training and validation sets contain observations of both classes.
 
 ```{r}
+mean(y_subtrain_bin == 0)
+mean(y_valid_bin == 0 )
+```
+
+Both have a roughly equal split so we continue.
+
+We fit an initial NN using the logistic function and cross entropy loss. 
+
+```{r}
+set.seed(123)
 # Fit neural network
 nn_fit <- neuralnet(
   Class ~ .,
@@ -387,7 +457,7 @@ We will now look at the effect of varying the number of PCs used and the number 
 set.seed(123)
 results <- data.frame()
 
-for (k in seq(40, 80, by=10)) {
+for (k in 10:80) {
  # training PCs
   train_pcs <- pca_fit$x[, 1:k]
   
@@ -443,15 +513,15 @@ results %>%
   gt()
 ```
 
-Since multiple NNs get a validation accuracy score of 80% we use the simplest one, with 70 PCs and 5 hidden nodes. We define simplest here as the lowest AIC and BIC score. Note the validation accuracy changes by 0.05 as we only have 20 observations in the validation set, hence identifying one more observation correctly changes the score by 1 / 20 = 0.05. Now we fit our model.
+Since multiple NNs get a validation accuracy score of 90% we use the simplest one, with 17 PCs and 11 hidden nodes. We define simplest here as the lowest AIC and BIC score. Note the validation accuracy changes by 0.05 as we only have 20 observations in the validation set, hence identifying one more observation correctly changes the score by 1 / 20 = 0.05. Now we fit our model.
 
 ```{r}
 set.seed(123)
 
 # Number of PCs
-k <- 70
+k <- 17
 # Number of hidden nodes
-h <- 5
+h <- 11
 
 # Perform PCA on whole training set
 pca_fit <- prcomp(X_train, scale. = T)
@@ -486,10 +556,26 @@ test_pred <- ifelse(test_prob >= 0.5, 1, 0)
 test_accuracy <- mean(test_pred == y_test_bin)
 test_accuracy
 
-table(Predicted = test_pred, Actual = y_test_bin)
+cm <- table(Predicted = test_pred, Actual = y_test_bin)
+cm
 ```
 
-This gives a test accuracy of 86%, a very good score.
+This gives a test accuracy of 87%. We will now look at the false positives/negatives rate.
+
+```{r}
+TN <- cm["0", "0"]
+FN <- cm["0", "1"]
+FP <- cm["1", "0"]
+TP <- cm["1", "1"]
+
+false_positive_rate <- FP / (FP + TN)
+false_negative_rate <- FN / (FN + TP)
+
+false_positive_rate
+false_negative_rate
+```
+
+This gives a false negative rate of roughly 0.14.
 
 ## Classification Trees
 
