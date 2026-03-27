@@ -118,51 +118,60 @@ In the following code, different kernels will be tuned based on error and compar
 Initially, a baseline AUC value must be caluated using default cost, C-classification and linear kernel.
 
 ```{r}
-# Initially we use 18 pc's
-n_pcs   <- 18
+# Preprocess data for SVM and set seed
+# Initially we use 40 pc's
+
+n_pcs <- 40
 train_data <- as.data.frame(pca_fit$x[, 1:n_pcs])
 
 train_data$Class <- y_train
 
 test_data  <- as.data.frame(predict(pca_fit, X_test)[, 1:n_pcs])
-test_data$Class <- y_test
 
-# Call SVM
-svm_18pc <- svm(Class ~ ., data = train_data, type = "C-classification", kernel = "linear")
-svm_18pc
+# SVM must have repsonse as factors
+test_data$Class <- as.factor(y_test)
 ```
 
-Now we test the model, using confidence scores, ROC and AUC. A good model that predicts the cancerous tumors well will have high AUC.
+Fit Baseline SVM:
 
 ```{r}
-SVM_model1 <- svm(Class ~ ., data = train_data, type = "C-classification", kernel = "linear", cost = 10, decision.values = TRUE)
+set.seed(1)
+# test baseline model, plotting ROC and calculating AUC
+SVM_model1 <- svm(Class ~ ., data = train_data, type = "C-classification", kernel = "linear", cost = 1, decision.values = TRUE)
 
-pred_class_model1 <- predict(SVM_model1, test_data)
-conf_mat_model1   <- table(Actual = test_data$Class, Predicted = pred_class_model1)
-accuracy_model1   <- sum(diag(conf_mat_model1)) / sum(conf_mat_model1) * 100
-
-
-# Get scores on the TEST data on AUC
+# Calcualte confidence scores for ROC curve
 scores_model1 <- attributes(predict(SVM_model1, test_data, decision.values = TRUE))$decision.values
 
-# ROC plot and AUC calulation
-# Use ROCR:: prefix to force R to use the right functions
+
+# Use ROCR:: 'ROCR::' as had error woth libraries
 pred_model1 <- ROCR::prediction(scores_model1, test_data$Class)
 perf_model1 <- ROCR::performance(pred_model1, "tpr", "fpr")
-plot(perf_model1, main = "ROC Curve")
 
+# Plot Roc curve for Baseline Model
+par(mfrow = c(1, 1))
+plot(perf_model1, main = "ROC Curve (Baseline)")
+
+# Calcualte AUC for baseline model
 auc_model1 <- ROCR::performance(pred_model1, "auc")@y.values[[1]]
 
-
 auc_model1
-accuracy_model1
+# 0.88
+
+
+# Classification error and confusion matrix
+pred_class_model1 <- predict(SVM_model1, test_data)
+error_model1 <- mean(pred_class_model1 != test_data$Class)
+error_model1
+table(ActualClass = test_data$Class, Prediction = pred_class_model1)
+
+# We get 29 TP, 50 TN, 6 FP, 15 FN 
 ```
 
-For model 1, which we will use as our baseline model, we see an AUC of \$\\approx\$ 0.89. This is a well fitting model to start off with.
+For model 1, our baseline model, we see an AUC of approximately 0.88. This is a well fitting model to start off with. We see that this model has 15 false negative values.
 
-We will now try to optimise the model through comparison of cost, linear vs non-linear boundary, class imbalance and principal components.
+We will now try to optimise the model through comparison of cost, linear vs non-linear boundary and principal components.
 
-Class Imbalance assessment:
+Cost Analysis: Cost value tells the function how many miss classifications are allowed i.e. false positive or false negative. Higher cost value can result in overfitting. We want to optimise cost so we can reduce the false negative results.
 
 ```{r}
 set.seed(2003)
