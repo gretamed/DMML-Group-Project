@@ -61,6 +61,13 @@ dim(cancerous)
 
 So we have 44 cancerous tissue samples and 56 non-cancerous samples.
 
+We also look at the test set split.
+
+```{r}
+cancerous <- test[test$Class == 1,]
+dim(cancerous)
+```
+
 We look at the correlation between variables, as PCA works best when variables are highly correlated.
 
 ```{r}
