@@ -52,7 +52,19 @@ data.frame(Training_set = dim(X_train),
   gt(rownames_to_stub = T)
 ```
 
-There are 2506 features and 100 observations in the training set. We look at the split of cancerous to non-cancerous observations.
+There are 2506 features and 100 observations in the training set. 
+
+We now look for missing data.
+
+```{r}
+X_train_df <- as.data.frame(X_train)
+
+total_missing <- sum(is.na(X_train_df))
+```
+
+No missing data.
+
+We look at the split of cancerous to non-cancerous observations.
 
 ```{r}
 cancerous <- training[training$Class == 1,]
@@ -69,6 +81,7 @@ dim(cancerous)
 ```
 
 We look at the correlation between variables, as PCA works best when variables are highly correlated.
+
 
 ```{r}
 corr_mat <- cor(X_train)
