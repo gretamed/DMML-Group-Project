@@ -232,40 +232,46 @@ error_linear
 table(ActualClass = test_data$Class, Prediction = pred_class_linear)
 ```
 
-We will try to compare non-linear model vs linear model
+Here we see a slight improvement of AUC when compared the the baseline model. It is also worth noting that the false negative count here is 10, which is an impovement on the baseline model meaning we miss less cancers with this model.
+
+Linear Kernel Analysis: This allows testing of different boundary types. Again, the kernel will be assessed on both AUC and false negative rate, with the latter being more influential in the optimisation of the model.
 
 ```{r}
+set.seed(1)
 train_data$Class <- as.factor(train_data$Class)
 test_data$Class  <- as.factor(test_data$Class)
+
 radial.tune <- tune(svm, Class ~., data = train_data,
                     type = "C-classification", kernel = "radial",
                     ranges = list(cost  = c(0.1, 1, 10, 100),
-                                  gamma = c(0.5, 1, 2, 3, 4)))
-
+                                  gamma = c(0.001, 0.01, 0.05, 0.1, 0.5)))
 summary(radial.tune)
 
-# We see minimum error at cost = 10, gamma = 0.5 and cost = 100, gamma = 0.5
+
+# We see minimum error at cost = 1, gamma = 0.05
 # We will test both of these cases against the linear model
-
-m_radial_c10 <- svm(Class ~ ., data = train_data, type = "C-classification",
-                kernel = "radial", cost = 10, gamma = 0.5,
+set.seed(1)
+svm_radial <- svm(Class ~ ., data = train_data, type = "C-classification",
+                kernel = "radial", cost = 1, gamma = 0.05,
                 decision.values = TRUE)
 
-s_c10<- attributes(predict(m_radial_c10, test_data, decision.values = TRUE))$decision.values
-p_c10 <- ROCR::prediction(s_c10, test_data$Class)
-auc_radial_c10 <- ROCR::performance(p_c10, "auc")@y.values[[1]]
-auc_radial_c10
+scores_radial <- attributes(predict(svm_radial, test_data, decision.values = TRUE))$decision.values
 
-# c = 100
+pred_radial <- ROCR::prediction(scores_radial, test_data$Class)
+perf_radial <- ROCR::performance(pred_radial, "tpr", "fpr")
+par(mfrow = c(1, 1))
+plot(perf_radial, main = "ROC Curve (Radial)")
+auc_radial <- ROCR::performance(pred_radial, "auc")@y.values[[1]]
+auc_radial
+# 0.908
+# This is better than the linear model based on AUC
 
-m_radial_c100 <- svm(Class ~ ., data = train_data, type = "C-classification",
-                kernel = "radial", cost = 100, gamma = 0.5,
-                decision.values = TRUE)
-
-s_c100<- attributes(predict(m_radial_c100, test_data, decision.values = TRUE))$decision.values
-p_c100 <- ROCR::prediction(s_c100, test_data$Class)
-auc_radial_c100 <- ROCR::performance(p_c100, "auc")@y.values[[1]]
-auc_radial_c100
+# Classification error and confusion matrix
+pred_class_radial <- predict(svm_radial, test_data)
+error_radial <- mean(pred_class_radial != test_data$Class)
+error_radial
+table(ActualClass = test_data$Class, Prediction = pred_class_radial)
+# We get very few false negatives: this is good for cancer
 ```
 
 We get a slightly higher value of AUC in the linear boundary model, hence we will proceed with this model.
