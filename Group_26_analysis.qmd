@@ -231,7 +231,7 @@ For model 1, our baseline model, we see an AUC of approximately 0.88. This is a 
 
 We will now try to optimise the model through comparison of cost, linear vs non-linear boundary and principal components.
 
-Cost Analysis: Cost value tells the function how many miss classifications are allowed i.e. false positive or false negative. Higher cost value can result in overfitting. We want to optimise cost so we can reduce the false negative results.
+Linear Cost Analysis: Cost value tells the function how many miss classifications are allowed i.e. false positive or false negative. Higher cost value can result in overfitting. We want to optimise cost so we can reduce the false negative results.
 
 ```{r}
 # To use tune we need the class variables as factors in both data sets
@@ -429,7 +429,7 @@ mean(y_valid_bin == 0 )
 
 Both have a roughly equal split so we continue.
 
-We fit an initial NN using the logistic function and cross entropy loss. 
+We fit an initial NN using the logistic function and cross entropy loss.
 
 ```{r}
 set.seed(123)
