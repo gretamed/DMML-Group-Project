@@ -189,6 +189,321 @@ This gives a very good goodness of fit value for k = 90.
 
 We will now look at various classification methods, using PCA.
 
+
+
+
+## K-Nearest Neighbours
+
+
+
+We applied 10‑fold cross‑validation to estimate the classification accuracy of KNN for K values from 1 to 100. The cross‑validation plot showed that three values (K = 1, 8, and 13) achieved the same maximum CV accuracy. Since cross‑validation alone could not distinguish between these tied values, we evaluated all three models on the independent test set. The test accuracies were 84% for K = 1, 74% for K = 8, and 72% for K = 13. Because K = 1 achieved the highest accuracy on unseen data, we selected K = 1 as the optimal number of neighbours. 
+
+This means each test point is classified using only its single nearest training point.
+
+```{r}
+#| echo: false
+#| warning: false
+
+
+library(class)
+
+set.seed(1)
+
+# Number of folds
+
+n <- nrow(X_train)
+fold_indices <- sample(rep(1:10, length.out = n))
+folds <- split(1:n, fold_indices)
+
+#Kfold <- 10
+#folds <- sample(rep(1:Kfold, length.out = nrow(X_train)))
+
+K_vals <- 1:100
+cv_acc <- numeric(length(K_vals))
+y_train <- as.factor(training[,1])
+y_test  <- as.factor(test[,1])
+
+
+for (i in seq_along(K_vals)) {
+  
+  k_val <- K_vals[i]
+  fold_acc <- numeric(10)
+  
+  for (f in 1:10) {
+    
+    
+    # Validation indices
+    valid_ind <- folds[[f]]
+    train_ind <- setdiff(1:n, valid_ind)
+    
+    # Split the data
+    X_train_fold <- X_train[train_ind, ]
+    y_train_fold <- y_train[train_ind]
+    
+    X_valid_fold <- X_train[valid_ind, ]
+    y_valid_fold <- y_train[valid_ind]
+    
+    
+    # Remove zero variance
+    nzv <- apply(X_train_fold, 2, sd) != 0
+    X_train_fold2 <- X_train_fold[, nzv, drop = FALSE]
+    X_valid_fold2 <- X_valid_fold[, nzv, drop = FALSE]
+    
+    # PCA
+    pca_fold <- prcomp(X_train_fold2, scale. = TRUE)
+    
+    k_pca <- min(18, ncol(pca_fold$x))
+    
+    X_train_fold_pca <- pca_fold$x[, 1:k_pca]
+    X_valid_fold_pca <- predict(pca_fold, X_valid_fold2)[, 1:k_pca]
+    
+    # KNN
+    pred_fold <- knn(X_train_fold_pca, 
+                     X_valid_fold_pca, 
+                     y_train_fold, 
+                     k = k_val)
+    
+    fold_acc[f] <- mean(pred_fold == y_valid_fold)
+  }
+  
+  cv_acc[i] <- mean(fold_acc)
+}
+
+
+# Plot CV accuracy
+plot(K_vals, cv_acc, type="b",
+     main="10-fold Cross-Validation Accuracy vs k",
+     xlab="k (neighbours)",
+     ylab="CV Accuracy")
+
+#from plot we see we have 3 k valuesa t the same level of cross validation accuracy 
+#so we do this 
+# Put CV results into a table
+results <- data.frame(
+  K = K_vals,
+  CV_Accuracy = cv_acc
+)
+
+# Sort from highest accuracy to lowest
+results_sorted <- results[order(-results$CV_Accuracy), ]
+
+# Show the top 10 K values
+head(results_sorted, 10)
+
+
+pred_test_1 <- knn(X_train_pca, X_test_pca, y_train, k = results_sorted$K[1])
+
+pred_test_8 <- knn(X_train_pca, X_test_pca, y_train, k = results_sorted$K[2])
+
+pred_test_13 <- knn(X_train_pca, X_test_pca, y_train, k = results_sorted$K[3])
+
+knn_acc_1<- mean(pred_test_1==y_test)
+knn_acc_8<- mean(pred_test_8==y_test)
+knn_acc_13<- mean(pred_test_13==y_test)
+
+
+#the k which resulted in the highest accuracy 
+best_k <- results_sorted$K[1]
+best_k
+
+pred_test <- knn(X_train_pca, X_test_pca, y_train, k = best_k)
+pred_test 
+
+#accuracy
+knn_acc<- mean(pred_test==y_test)
+
+confusion_matrix<- table(Predicted=pred_test, Actual=y_test)
+confusion_matrix
+
+#table form of confusion matrix
+conf_mat_table <- data.frame(
+    Actual = c("-1", "1"),
+    Pred_minus1 = c(confusion_matrix["-1","-1"], confusion_matrix["1","-1"]),
+    Pred_1      = c(confusion_matrix["-1","1"],  confusion_matrix["1","1"])
+)
+
+conf_mat_table %>%
+    gt() %>%
+    tab_spanner(
+        label = "Predicted",
+        columns = c("Pred_minus1", "Pred_1")
+    ) %>%
+    cols_label(
+        Actual = "Actual",
+        Pred_minus1 = "-1",
+        Pred_1 = "1"
+    )
+
+
+
+sensitivity <- confusion_matrix["1","1"] /
+  (confusion_matrix["1","1"] + confusion_matrix["-1","1"])
+sensitivity
+
+specificity<- (confusion_matrix["-1","-1"])/ (confusion_matrix["-1","-1"]+confusion_matrix["1","-1"])
+specificity
+
+
+metrics_table <- data.frame(
+  Metric = c("Accuracy", "Sensitivity", "Specificity"),
+  Value  = c(knn_acc, sensitivity, specificity)
+)
+
+metrics_table %>% gt()
+
+
+
+```
+
+We computed the confusion matrix, sensitivity, specificity, and accuracy for the final KNN classifier using K = 1. Sensitivity measures the ability to correctly identify cancerous samples (class = 1), while specificity measures the ability to correctly identify non‑cancerous samples (class = −1). The accuracy represents the overall proportion of correctly classified observations.
+
+
+## Discriminant
+
+###Linear Discriminant Analysis
+
+
+After applying PCA for dimensionality reduction, we first convert the PCA components into data frame and fit LDA model with equal class priors probabilityies of 1/2. The model then learns the linear combination of PCs that best separates cancerous and non‑cancerous samples.
+
+
+
+```{r}
+#| echo: false
+
+# calculate variance by group
+aggregate(X_train_pca, by=list(y_train), FUN=var)  #'x' is a feature vector and 'factor' is used to group features; for classification, the class label can be used as 'factor'. 
+
+# 
+library(GGally)
+ggpairs(X_train_pca, columns=1:4, aes(colour = factor(y_train))) 
+
+
+library(MASS)
+#convert x_train_pca to data frame
+X_train_pca_df <- data.frame(y = y_train, X_train_pca)
+LDA <- lda(y ~ ., data = X_train_pca_df, prior = c(1/2, 1/2))
+X_test_pca_df<- data.frame(y=y_test, X_test_pca)
+pred_lda <- predict(LDA, newdata = X_test_pca_df)
+
+
+#accuraccy
+lda_acc<- mean(pred_lda$class==y_test)
+
+confusion_matrix <- table(Predicted=pred_lda$class, Actual=y_test)
+confusion_matrix
+
+
+#table form of the confusion matrix
+conf_mat_table <- data.frame(
+    Actual = c("-1", "1"),
+    Pred_minus1 = c(confusion_matrix["-1","-1"], confusion_matrix["1","-1"]),
+    Pred_1      = c(confusion_matrix["-1","1"],  confusion_matrix["1","1"])
+)
+
+conf_mat_table %>%
+    gt() %>%
+    tab_spanner(
+        label = "Predicted",
+        columns = c("Pred_minus1", "Pred_1")
+    ) %>%
+    cols_label(
+        Actual = "Actual",
+        Pred_minus1 = "-1",
+        Pred_1 = "1"
+    )
+
+
+sensitivity <- confusion_matrix["1","1"] /
+  (confusion_matrix["1","1"] + confusion_matrix["-1","1"])
+sensitivity
+
+specificity<- (confusion_matrix["-1","-1"])/ (confusion_matrix["-1","-1"]+confusion_matrix["1","-1"])
+specificity
+
+
+
+metrics_table <- data.frame(
+  Metric = c("Accuracy", "Sensitivity", "Specificity"),
+  Value  = c(lda_acc, sensitivity, specificity)
+)
+
+metrics_table %>% gt()
+
+
+# LDA histogram: shows how the test samples are distributed along the first
+# linear discriminant (LD1)
+
+ldahist(data = pred_lda$x[,1], g=y_test)
+
+# Density plot of LD1: smoothed version of the histogram above.
+dataset <- data.frame(Type=y_test, lda=pred_lda$x[,1])
+ggplot(dataset, aes(x=lda)) + 
+  geom_density(aes(group=Type, colour=Type, fill=Type), alpha=0.3)
+
+```
+
+
+We then visualise how well the samples separate along the first linear discriminant using density plots and LDA histograms. In both plots, the x‑axis represents LD1 scores, which are the projections of each observation onto the linear discriminant direction. These show how well the classes separate along the discriminant axis and provide insight into the model’s classification performance. Class −1 values are mostly negative, while class 1 values are mostly positive with a small overlap around LD1=0. This indicates that LDA’s linear boundary effectively separates the cancerous and non‑cancerous groups.
+
+
+Although several PCs showed similar within class variances, others displayed noticeable differences, indicating that the equal covariance assumption is only approximately satisfied. Therefore, LDA is still appropriate, but we also fit QDA.
+
+
+###Quadratic Discriminant Analysis
+
+After fitting QDA on the PCA transformed training data, we predicted the test set and calculated accuracy, sensitivity, specificity, and the confusion matrix. QDA is therefore evaluated solely through its classification results (accuracy, sensitivity, specificity).
+
+```{r}
+#| echo: false
+
+QDA <- qda(y ~ ., data = X_train_pca_df, prior = c(1/2, 1/2))
+pred_qda <- predict(QDA,newdata = X_test_pca_df)
+#accuraccy
+qda_acc<- mean(pred_qda$class==y_test)
+qda_acc
+
+
+confusion_matrix <- table(Predicted=pred_qda$class, Actual=y_test)
+confusion_matrix
+
+#table form of the confusion matrix
+conf_mat_table <- data.frame(
+    Actual = c("-1", "1"),
+    Pred_minus1 = c(confusion_matrix["-1","-1"], confusion_matrix["1","-1"]),
+    Pred_1      = c(confusion_matrix["-1","1"],  confusion_matrix["1","1"])
+)
+
+conf_mat_table %>%
+    gt() %>%
+    tab_spanner(
+        label = "Predicted",
+        columns = c("Pred_minus1", "Pred_1")
+    ) %>%
+    cols_label(
+        Actual = "Actual",
+        Pred_minus1 = "-1",
+        Pred_1 = "1"
+    )
+
+
+sensitivity <- confusion_matrix["1","1"] /
+  (confusion_matrix["1","1"] + confusion_matrix["-1","1"])
+sensitivity
+
+specificity<- (confusion_matrix["-1","-1"])/ (confusion_matrix["-1","-1"]+confusion_matrix["1","-1"])
+specificity
+
+metrics_table <- data.frame(
+  Metric = c("Accuracy", "Sensitivity", "Specificity"),
+  Value  = c(qda_acc, sensitivity, specificity)
+)
+
+metrics_table %>% gt()
+
+```
+
+
+
 ## Support Vector Machines
 
 Support Vector Machines (SVM) is a supervised learning technique used to classify data. Here we will be using SVM to classify the variable 'Class'. Class is conveniently in the format already required by SVM of being binary with values -1, 1 for non-cancerous and cancerous respectively.
