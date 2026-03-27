@@ -234,7 +234,7 @@ table(ActualClass = test_data$Class, Prediction = pred_class_linear)
 
 Here we see a slight improvement of AUC when compared the the baseline model. It is also worth noting that the false negative count here is 10, which is an impovement on the baseline model meaning we miss less cancers with this model.
 
-Linear Kernel Analysis: This allows testing of different boundary types. Again, the kernel will be assessed on both AUC and false negative rate, with the latter being more influential in the optimisation of the model.
+Radial Kernel Analysis: This allows testing of different boundary types. Again, the kernel will be assessed on both AUC and false negative rate, with the latter being more influential in the optimisation of the model.
 
 ```{r}
 set.seed(1)
