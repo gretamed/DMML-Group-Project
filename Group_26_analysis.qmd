@@ -1101,6 +1101,6 @@ class_rate_rf <- mean(rf_PCA40_pred==PCA40_test$Class)
 class_rate_rf 
 ```
 
-No, no magical change.
+No, of course it doesn't make a change.
 
-Of all of the classification tree methods, bagging produces the best results. And, across all of these models, using 13 PCs, which only capture 62% of variabiltiy, prodices best results. The classification tree of choice is obtained by applying bagging to data with 13 PCs, which achieves an accuracy of 82%. However, we allready know that this is not the most accurate classification method that has been tested for this data.
+Of all of the classification tree methods, bagging produces the best results. And, across all of these models, using 13 PCs, which only capture 62% of variabiltiy, produces best results. The classification tree of choice is obtained by applying bagging to data with 13 PCs, which achieves an accuracy of 82%. However, we already know that this is not the most accurate classification method that has been tested for this data.
