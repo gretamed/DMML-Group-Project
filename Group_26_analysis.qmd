@@ -302,7 +302,7 @@ plot(perf_poly, main = "ROC Curve (Deg. 2 Polynomial)")
 
 auc_poly <- ROCR::performance(pred_poly, "auc")@y.values[[1]]
 auc_poly
-# 0.903
+# 0.886
 
 # Classification error and confusion matrix
 pred_class_poly <- predict(svm_poly, test_data)
