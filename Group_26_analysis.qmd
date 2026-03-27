@@ -274,57 +274,46 @@ table(ActualClass = test_data$Class, Prediction = pred_class_radial)
 # We get very few false negatives: this is good for cancer
 ```
 
-We get a slightly higher value of AUC in the linear boundary model, hence we will proceed with this model.
+The raidal RBF kernel, has a greater AUC than the tuned linear model, along with producing only 3 false negative counts, this means that of the 100 tumours, we only miss three cancerous ones, while correctly identifying 41 cancers. There are 19 false positive rates, but given the context of the problem this is not as alarming as it may seem as the most dangerous inaccuracy is false negative.
 
-Cost optimisation:
+Degree 2 Polynomial Kernel Test: This is similar to the above test but for polynomial of degree 2
 
 ```{r}
-# Optimising Cost ---------------------------------------------------------
+# Tune polynomial kernel (degree 2) over cost, gamma and coef0
+set.seed(1)
+poly.tune <- tune(svm, Class ~., data = train_data,
+                  type = "C-classification", kernel = "polynomial", degree = 2, ranges = list(cost  = c(0.1, 1, 5), 
+                                                                                              gamma = c(0.01, 0.05, 0.1), 
+                                                                                              coef0 = c(0, 1, 2, 3)))
+summary(poly.tune)
+poly.tune$best.model
 
-# To use tune we need the class variables as factors in both data sets
+# creat updated SVM:
+svm_poly <- svm(Class ~ ., data = train_data, type = "C-classification", kernel = "polynomial",degree = 2, cost = 1, 
+                  gamma = 0.05, coef0 = 2, decision.values = TRUE)
 
-set.seed(2003)
-train_data$Class <- as.factor(train_data$Class)
-test_data$Class  <- as.factor(test_data$Class)
+# Evaluate on test set
+scores_poly <- attributes(predict(svm_poly, test_data, decision.values = TRUE))$decision.values
+pred_poly <- ROCR::prediction(scores_poly, test_data$Class)
+perf_poly <- ROCR::performance(pred_poly, "tpr", "fpr")
 
+par(mfrow = c(1, 1))
+plot(perf_poly, main = "ROC Curve (Deg. 2 Polynomial)")
 
+auc_poly <- ROCR::performance(pred_poly, "auc")@y.values[[1]]
+auc_poly
+# 0.903
 
-linear.tune<-tune(svm, Class~., data=train_data,
-                  type="C-classification", kernel="linear",
-                  ranges=list(cost=c(0.1,1,10,100)))
-summary(linear.tune)
-
-# We see from this that the best cost value will be 0.1, as error is lowest at 0.18, also dispersion is lowest, we notice weeor increasing monotomicaly so we may try smaller cost to see if trend continues.
-
-linear.tune2 <-tune(svm, Class~., data=train_data,
-                  type="C-classification", kernel="linear",
-                  ranges=list(cost=c(0.01, 0.03, 0.05, 0.07, 0.1)))
-summary(linear.tune2)
-
-# We see that for this somewhere between cost = 0.05 and 0.1 gives us the lowest error, We will try again within this range.
-
-
-linear.tune3 <-tune(svm, Class~., data=train_data,
-                  type="C-classification", kernel="linear",
-                  ranges=list(cost=c(0.06, 0.07, 0.08, 0.09)))
-summary(linear.tune3)
-
-# Note: 0.07 -> 0.1 all have same error, we wioll select cost then on lowest dispersion. Hence cost = 0.1
-
-# Fitting new model to compare to model 1
-SVM_model2 <- svm(Class ~ ., data = train_data, type = "C-classification",
-                kernel = "linear", cost = 0.1, decision.values = TRUE)
-
-scores_model2 <- attributes(predict(SVM_model2, test_data, decision.values = TRUE))$decision.values
-
-pred_model2 <- ROCR::prediction(scores_model2, test_data$Class)
-perf_model2 <- ROCR::performance(pred_model2, "tpr", "fpr")
-plot(perf_model2, main = "ROC Curve (cost = 0.1)")
-auc_model2 <- ROCR::performance(pred_model2, "auc")@y.values[[1]]
-auc_model2
+# Classification error and confusion matrix
+pred_class_poly <- predict(svm_poly, test_data)
+error_poly <- mean(pred_class_poly != test_data$Class)
+error_poly
+table(ActualClass = test_data$Class, Prediction = pred_class_poly)
 ```
 
-Through optimising cost, we see a slight increase in the AUC value, suggesting a more accurate model.
+The AUC value is very slightly lower for the polynomial kernel SVM than for the radial kernel, suggesting radial is more accurate. Furthermore, there are 11 false negatives, over three times that of the radial kernel model.
+
+Thus, the best model is the radial model.
 
 ## Neural Network
 
