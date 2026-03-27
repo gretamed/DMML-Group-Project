@@ -174,12 +174,62 @@ We will now try to optimise the model through comparison of cost, linear vs non-
 Cost Analysis: Cost value tells the function how many miss classifications are allowed i.e. false positive or false negative. Higher cost value can result in overfitting. We want to optimise cost so we can reduce the false negative results.
 
 ```{r}
-set.seed(2003)
-weighted.tune <- tune(svm, Class ~., data = train_data,
-                      type = "C-classification", kernel = "linear",
-                      ranges = list(cost = c(0.1, 1, 10, 100)),
-                      class.weights = c("-1" = 1, "1" = 2))
-summary(weighted.tune)
+# To use tune we need the class variables as factors in both data sets
+
+train_data$Class <- as.factor(train_data$Class)
+test_data$Class  <- as.factor(test_data$Class)
+
+
+# use tune function for cross-validation testing of different cost values
+set.seed(1)
+linear.tune<-tune(svm, Class~., data=train_data,
+                  type="C-classification", kernel="linear",
+                  ranges=list(cost=c(0.1,1,10,100)))
+summary(linear.tune)
+summary(linear.tune)$best.parameters
+
+# We see from this that the best cost value will be 0.1, as error is lowest at 0.26, also dispersion is lowest, we notice however, error has a positive trend with cost so we may try smaller cost to see if trend continues.
+
+set.seed(1)
+linear.tune2 <-tune(svm, Class~., data=train_data,
+                  type="C-classification", kernel="linear",
+                  ranges=list(cost=c(0.01, 0.03, 0.05, 0.07, 0.1)))
+summary(linear.tune2)
+summary(linear.tune2)$best.parameters
+
+# We see that for this somewhere between (not including) cost = 0.01 to cost = 0.07 gives us the lowest error, We will try again within this range.
+
+set.seed(1)
+linear.tune3 <-tune(svm, Class~., data=train_data,
+                  type="C-classification", kernel="linear",
+                  ranges=list(cost=c(0.02, 0.03, 0.04, 0.05, 0.06)))
+summary(linear.tune3)
+
+# We see that error occurs at cost = 0.03, 0.05, 0.06, with the latter having the lowest dispersion, hence cost = 0.06 will be the value going forward.
+
+# Fitting new cost tuned model to compare to model 1
+set.seed(1)
+SVM_model2 <- svm(Class ~ ., data = train_data, type = "C-classification",
+                kernel = "linear", cost = 0.06, decision.values = TRUE)
+
+scores_model2 <- attributes(predict(SVM_model2, test_data, decision.values = TRUE))$decision.values
+
+pred_model2 <- ROCR::prediction(scores_model2, test_data$Class)
+perf_model2 <- ROCR::performance(pred_model2, "tpr", "fpr")
+
+par(mfrow = c(1, 1))
+plot(perf_model2, main = "ROC Curve (cost = 0.06)")
+auc_model2 <- ROCR::performance(pred_model2, "auc")@y.values[[1]]
+auc_model2
+# 0.898
+# Model 2 better than model 1
+
+
+# Classification error and confusion matrix
+pred_class_linear <- predict(SVM_model2, test_data)
+error_linear <- mean(pred_class_linear != test_data$Class)
+error_linear
+table(ActualClass = test_data$Class, Prediction = pred_class_linear)
 ```
 
 We will try to compare non-linear model vs linear model
