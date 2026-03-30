@@ -52,7 +52,7 @@ data.frame(Training_set = dim(X_train),
   gt(rownames_to_stub = T)
 ```
 
-There are 2506 features and 100 observations in the training set. 
+There are 2506 features and 100 observations in the training set.
 
 We now look for missing data.
 
@@ -81,7 +81,6 @@ dim(cancerous)
 ```
 
 We look at the correlation between variables, as PCA works best when variables are highly correlated.
-
 
 ```{r}
 corr_mat <- cor(X_train)
@@ -189,14 +188,9 @@ This gives a very good goodness of fit value for k = 90.
 
 We will now look at various classification methods, using PCA.
 
-
-
-
 ## K-Nearest Neighbours
 
-
-
-We applied 10‑fold cross‑validation to estimate the classification accuracy of KNN for K values from 1 to 100. The cross‑validation plot showed that three values (K = 1, 8, and 13) achieved the same maximum CV accuracy. Since cross‑validation alone could not distinguish between these tied values, we evaluated all three models on the independent test set. The test accuracies were 84% for K = 1, 74% for K = 8, and 72% for K = 13. Because K = 1 achieved the highest accuracy on unseen data, we selected K = 1 as the optimal number of neighbours. 
+We applied 10‑fold cross‑validation to estimate the classification accuracy of KNN for K values from 1 to 100. The cross‑validation plot showed that three values (K = 1, 8, and 13) achieved the same maximum CV accuracy. Since cross‑validation alone could not distinguish between these tied values, we evaluated all three models on the independent test set. The test accuracies were 84% for K = 1, 74% for K = 8, and 72% for K = 13. Because K = 1 achieved the highest accuracy on unseen data, we selected K = 1 as the optimal number of neighbours.
 
 This means each test point is classified using only its single nearest training point.
 
@@ -360,15 +354,11 @@ metrics_table %>% gt()
 
 We computed the confusion matrix, sensitivity, specificity, and accuracy for the final KNN classifier using K = 1. Sensitivity measures the ability to correctly identify cancerous samples (class = 1), while specificity measures the ability to correctly identify non‑cancerous samples (class = −1). The accuracy represents the overall proportion of correctly classified observations.
 
-
 ## Discriminant
 
 ###Linear Discriminant Analysis
 
-
 After applying PCA for dimensionality reduction, we first convert the PCA components into data frame and fit LDA model with equal class priors probabilityies of 1/2. The model then learns the linear combination of PCs that best separates cancerous and non‑cancerous samples.
-
-
 
 ```{r}
 #| echo: false
@@ -445,12 +435,9 @@ ggplot(dataset, aes(x=lda)) +
 
 ```
 
-
 We then visualise how well the samples separate along the first linear discriminant using density plots and LDA histograms. In both plots, the x‑axis represents LD1 scores, which are the projections of each observation onto the linear discriminant direction. These show how well the classes separate along the discriminant axis and provide insight into the model’s classification performance. Class −1 values are mostly negative, while class 1 values are mostly positive with a small overlap around LD1=0. This indicates that LDA’s linear boundary effectively separates the cancerous and non‑cancerous groups.
 
-
 Although several PCs showed similar within class variances, others displayed noticeable differences, indicating that the equal covariance assumption is only approximately satisfied. Therefore, LDA is still appropriate, but we also fit QDA.
-
 
 ###Quadratic Discriminant Analysis
 
@@ -504,8 +491,6 @@ metrics_table <- data.frame(
 metrics_table %>% gt()
 
 ```
-
-
 
 ## Support Vector Machines
 
@@ -712,6 +697,22 @@ table(ActualClass = test_data$Class, Prediction = pred_class_poly)
 The AUC value is very slightly lower for the polynomial kernel SVM than for the radial kernel, suggesting radial is more accurate. Furthermore, there are 11 false negatives, over three times that of the radial kernel model.
 
 Thus, the best model is the radial model.
+
+Plot of overlayed ROC curves for comparison:
+
+```{r}
+plot(perf_model1, col = "black")
+lines(perf_model2@x.values[[1]], perf_model2@y.values[[1]], col = "blue")
+lines(perf_radial@x.values[[1]], perf_radial@y.values[[1]], col = "red")
+lines(perf_poly@x.values[[1]],   perf_poly@y.values[[1]],   col = "green")
+legend("bottomright", cex = 0.6,
+       legend = c("Baseline linear: AUC = 0.880", 
+                  "Tuned Linear: AUC = 0.989", 
+                  "Radial: AUC = 0.908", 
+                  "Polynomial: AUC = 0.886"),
+       lty = 1,
+       col = c("black", "blue", "red", "green"))
+```
 
 ## Neural Network
 
