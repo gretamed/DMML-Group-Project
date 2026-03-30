@@ -274,7 +274,10 @@ for (i in seq_along(K_vals)) {
 plot(K_vals, cv_acc, type="b",
      main="10-fold Cross-Validation Accuracy vs k",
      xlab="k (neighbours)",
-     ylab="CV Accuracy")
+     ylab="CV Accuracy",
+     cex.main=1.6,
+     cex.lab=1.4,
+     cex.axis=1.2)
 
 #from plot we see we have 3 k valuesa t the same level of cross validation accuracy 
 #so we do this 
